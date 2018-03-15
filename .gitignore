@@ -1,2 +1,2 @@
 *.DS_Store
-*.link_state.dSYM/
+/link_state.dSYM/
