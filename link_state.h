@@ -1,9 +1,9 @@
 #ifndef LINK_STATE_H
 #define LINK_STATE_H
 
-#define SLEEP_LO s_to_ms(10)
-#define SLEEP_HI s_to_ms(20)
-#define CHANGES 10
+#define SLEEP_LO 10
+#define SLEEP_HI 20
+#define CHANGES 2
 #define INFINITY 2147483647
 #define BUFF_SIZE 1024
 
@@ -28,7 +28,7 @@ void receive_info();
 void *receive_updates();
 void *link_state();
 int min_distance(int *dist, int *visited);
-void update_cost(int neighbor, int new_cost);
+void update_cost();
 void sleep_timer(int duration);
 
 #endif /* LINK_STATE_H */

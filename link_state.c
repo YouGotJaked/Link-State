@@ -68,24 +68,14 @@ int main(int argc, char **argv) {
     pthread_create(&recv_thr, NULL, receive_updates, NULL);
     pthread_create(&link_thr, NULL, link_state, NULL);
 
-    for (int i = 0; i < CHANGES; i++) {
-        int neighbor, new_cost;
-        
-        /*
-        printf("Please enter 2 inputs.\n");
-        // read change from keyboard
-        if (scanf("\n%d %d", &neighbor, &new_cost) != 2) {
-            printf("Error: enter 2 inputs.\n");
-        }
-         */
-        neighbor = rand() % num_nodes;
-        new_cost = rand() % 100;
+    int i;
+    for (i = 0; i < CHANGES; i++) {
         // update neighbor cost table
-        update_cost(neighbor, new_cost);
+        update_cost();
         
         // sleep for 10s
-        printf("Sleeping for %ds...\n", ms_to_s(SLEEP_LO));
-        usleep(SLEEP_LO);
+        printf("\nSleeping for %ds...\n", SLEEP_LO);
+        sleep(SLEEP_LO);
     }
 
     close(sock);
@@ -104,25 +94,33 @@ int check_argc(int argc, int n, char **argv) {
 }
 
 void allocate_rows(int **c_table) {
-    for (int i = 0; i < num_nodes; i++) {
+    int i;
+    for (i = 0; i < num_nodes; i++) {
         c_table[i] = (int*) malloc(sizeof(int) * num_nodes);
     }
 }
 
-void free_rows(int **c_table) {
-    for (int i = 0; i < num_nodes; i++) {
+void free_rows(int **c_table) {        
+    int i;
+    for (i = 0; i < num_nodes; i++) {
         free(c_table[i]);
     }
 }
 
 void parse_costs(FILE *fp, int **c_table) {
-    for (int i = 0; i < num_nodes; i++) {
-        fscanf(fp, "%d%d%d%d", &c_table[i][0], &c_table[i][1], &c_table[i][2], &c_table[i][3]);
+    int i, j;
+    for (i = 0; i < num_nodes; i++) {
+	for (j = 0; j < num_nodes; j++) {
+	    if (fscanf(fp, "%d", &c_table[i][j]) != 1) {
+		break;
+	    }
+	}
     }
 }
 
 void parse_hosts(FILE *fp, Machine *h_table) {
-    for (int i = 0; i < num_nodes; i++) {
+    int i;
+    for (i = 0; i < num_nodes; i++) {
         fscanf(fp, "%s%s%d", h_table[i].name, h_table[i].ip, &h_table[i].port);
     }
 }
@@ -132,18 +130,22 @@ void print_machine(Machine m) {
 }
 
 void print_host_table(Machine *h_table) {
-    for (int i = 0; i < num_nodes; i++) {
+    int i;
+    for (i = 0; i < num_nodes; i++) {
         print_machine(h_table[i]);
     }
+    printf("\n");
 }
 
 void print_cost_table(int **c_table) {
-    for (int i = 0; i < num_nodes; i++) {
-        for (int j = 0; j < num_nodes; j++) {
+    int i, j;
+    for (i = 0; i < num_nodes; i++) {
+        for (j = 0; j < num_nodes; j++) {
             printf("%d\t",c_table[i][j]);
         }
         printf("\n");
     }
+    printf("\n");
 }
 
 void send_info() {
@@ -173,7 +175,18 @@ void send_info() {
 void receive_info() {
     // receive msg from other nodes
     int bytes = recvfrom(sock, &input, sizeof input, 0, NULL, NULL);
-    printf("Received info.\n");
+    
+    switch(bytes) {
+	case 0:
+	    printf("No messages available to be received.\n");
+	    break;
+	case -1:
+	    perror("Could not receive message");
+	    printf("\n");
+	    break;
+	default:
+	    printf("Received info.\n");
+    }
 }
 
 void *receive_updates() {
@@ -188,17 +201,7 @@ void *receive_updates() {
         pthread_mutex_lock(&my_lock);
         cost_table[host1][host2] = weight;
         cost_table[host2][host1] = weight;
-        
-        /*
-        printf("Updated cost table:\n");
-        int i, j;
-        for (i = 0; i < num_nodes; i++) {
-            for (j = 0; j < num_nodes; j++) {
-                printf("%d ", cost_table[i][j]);
-            }
-            printf("\n");
-        }
-        */
+
         pthread_mutex_unlock(&my_lock);
     }
 }
@@ -209,17 +212,17 @@ void *link_state() {
         int i, src, count;
         int dist[num_nodes];
         int visited[num_nodes];
-        int temp_costs[num_nodes][num_nodes];
         
         pthread_mutex_lock(&my_lock);
-        
-        for (src = 0; src < num_nodes; src++) {
-            for (i = 0; i < num_nodes; i++) {
-                dist[i] = INFINITY;
+	
+	for (i = 0; i < num_nodes; i++) {
+                dist[i] = INFINITY; //change to previous cost table value
                 visited[i] = 0;
-            }
-            
-            dist[src] = 0;
+		vistited[router_id] = 1;
+        }
+        
+        for (src = 0; src < num_nodes; src++) {  
+            //dist[src] = 0;
             
             for (count = 0; count < num_nodes - 1; count++) {
                 int u, v;
@@ -228,6 +231,7 @@ void *link_state() {
                 visited[u] = 1;
                 
                 for (v = 0; v < num_nodes; v++) {
+		  //check not visited , not same ID, and cost_table[u][v] < dist[v]
                     if (visited[v] == 0 && cost_table[u][v] && dist[u] != INFINITY && dist[u] + cost_table[u][v] < dist[v]) {
                         dist[v] = dist[u] + cost_table[u][v];
                     }
@@ -235,19 +239,19 @@ void *link_state() {
             }
         }
         
-        printf("Vertex\t\tDistance from Source\n");
-        for (int i = 0; i < num_nodes; i++) {
-            printf("%d\t\t%d\n", i, dist[i]);
-        }
-    
         pthread_mutex_unlock(&my_lock);
         
         // sleep for 10-20s
         int dur = rand() % (SLEEP_HI + 1 - SLEEP_LO) + SLEEP_LO;
-        printf("Sleeping for %ds...\n", ms_to_s(dur));
-        usleep(dur);
+        printf("\nSleeping for %ds...\n", dur);
+        sleep(dur);
+	
+	// print distance array
+	printf("\nVertex\tDistance\n");
+        for (i = 0; i < num_nodes; i++) {
+            printf("%d\t%d\n", i, dist[i]);
+        }
     }
-
 }
 
 int min_distance(int *dist, int *visited) {
@@ -264,7 +268,12 @@ int min_distance(int *dist, int *visited) {
     return min_index;
 }
 
-void update_cost(int neighbor, int new_cost) {
+void update_cost() {
+    int neighbor, new_cost;
+       
+    printf("Enter a neighbor and new node:\n");
+    scanf("%d %d", &neighbor, &new_cost);
+  
     pthread_mutex_lock(&my_lock);
 
     cost_table[router_id][neighbor] = new_cost;
@@ -276,7 +285,7 @@ void update_cost(int neighbor, int new_cost) {
     // send msg to to other nodes using UDP
     send_info();
     
-    printf("New cost table after updating: \n");
+    printf("\nNew cost table after updating: \n");
     print_cost_table(cost_table);
     
     pthread_mutex_unlock(&my_lock);
