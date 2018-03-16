@@ -79,7 +79,7 @@ int main(int argc, char **argv) {
         sleep(SLEEP_LO);
     }
 
-    // wait 60s then exit
+    // wait user-defined amount of seconds before exiting
     printf("No more changes to be made to Router %d. Exiting in %ds.\n", router_id, WAIT);
     sleep(WAIT);
 
@@ -235,7 +235,6 @@ void *link_state() {
                 visited[u] = 1;
                 
                 for (v = 0; v < num_nodes; v++) {
-		  //check not visited , not same ID, and cost_table[u][v] < dist[v]
                     if (visited[v] == 0 && cost_table[u][v] && dist[u] != INFINITY && dist[u] + cost_table[u][v] < dist[v]) {
                         dist[v] = dist[u] + cost_table[u][v];
                     }
