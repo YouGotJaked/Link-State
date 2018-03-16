@@ -80,8 +80,8 @@ int main(int argc, char **argv) {
     }
 
     // wait 60s then exit
-    printf("No more changes to be made to Router %d. Exiting in %ds.\n", router_id, 60);
-    sleep(60);
+    printf("No more changes to be made to Router %d. Exiting in %ds.\n", router_id, WAIT);
+    sleep(WAIT);
 
     free_rows(cost_table);
     free(cost_table);
