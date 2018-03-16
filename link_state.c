@@ -6,13 +6,14 @@
 #include <netinet/in.h>
 #include <arpa/inet.h>
 #include <pthread.h>
+#include <signal.h>
 #include "link_state.h"
 
 //  ps ax | grep <executable>
 //  kill -SIGKILL <PID>
 
 pthread_mutex_t my_lock;
-int sock, port, router_id, num_nodes;
+int sock, port, router_id, num_nodes, SENDIT = 0;
 int input[3], output[3]; // host1, host2, weight
 int **cost_table;
 Machine *host_table;
@@ -29,7 +30,7 @@ int main(int argc, char **argv) {
     FILE *f_costs = fopen(argv[3], "r");
     FILE *f_hosts = fopen(argv[4], "r");
 
-    cost_table = (int**) malloc(sizeof(int*) * num_nodes * num_nodes);
+    cost_table = (int**) malloc(sizeof(int*) * num_nodes);
     allocate_rows(cost_table);
 
     host_table = (Machine*) malloc(sizeof(Machine*) * num_nodes);
@@ -74,11 +75,14 @@ int main(int argc, char **argv) {
         update_cost();
         
         // sleep for 10s
-        printf("\nSleeping for %ds...\n", SLEEP_LO);
+        printf("Sleeping for %ds...\n", SLEEP_LO);
         sleep(SLEEP_LO);
     }
 
-    close(sock);
+    // wait 60s then exit
+    printf("No more changes to be made to Router %d. Exiting in %ds.\n", router_id, 60);
+    sleep(60);
+
     free_rows(cost_table);
     free(cost_table);
     free(host_table);
@@ -110,11 +114,11 @@ void free_rows(int **c_table) {
 void parse_costs(FILE *fp, int **c_table) {
     int i, j;
     for (i = 0; i < num_nodes; i++) {
-	for (j = 0; j < num_nodes; j++) {
-	    if (fscanf(fp, "%d", &c_table[i][j]) != 1) {
-		break;
-	    }
-	}
+        for (j = 0; j < num_nodes; j++) {
+            if (fscanf(fp, "%d", &c_table[i][j]) != 1) {
+                break;
+            }
+        }
     }
 }
 
@@ -186,6 +190,7 @@ void receive_info() {
 	    break;
 	default:
 	    printf("Received info.\n");
+        SENDIT = 1;
     }
 }
 
@@ -209,20 +214,19 @@ void *receive_updates() {
 // implemented using Dijkstra
 void *link_state() {
     while (1) {
-        int i, src, count;
+        int i, j, src, count;
         int dist[num_nodes];
         int visited[num_nodes];
+        int temp_costs[num_nodes][num_nodes];
         
         pthread_mutex_lock(&my_lock);
-	
-	for (i = 0; i < num_nodes; i++) {
-                dist[i] = INFINITY; //change to previous cost table value
+
+        for (src = 0; src < num_nodes; src++) {
+            for (i = 0; i < num_nodes; i++) {
+                dist[i] = INFINITY;
                 visited[i] = 0;
-		vistited[router_id] = 1;
-        }
-        
-        for (src = 0; src < num_nodes; src++) {  
-            //dist[src] = 0;
+            }
+            dist[src] = 0;
             
             for (count = 0; count < num_nodes - 1; count++) {
                 int u, v;
@@ -237,20 +241,30 @@ void *link_state() {
                     }
                 }
             }
+            
+            for (i = 0; i < num_nodes; i++) {
+                temp_costs[src][i] = dist[i];
+                temp_costs[i][src] = dist[i];
+            }
         }
         
+        if (SENDIT) {
+            printf("Current least costs:\n");
+            for (i = 0; i < num_nodes; i++) {
+                for (j = 0; j < num_nodes; j++) {
+                    printf("%d\t", temp_costs[i][j]);
+                }
+                printf("\n");
+            }
+            SENDIT = 0;
+        }
+            
         pthread_mutex_unlock(&my_lock);
         
         // sleep for 10-20s
         int dur = rand() % (SLEEP_HI + 1 - SLEEP_LO) + SLEEP_LO;
-        printf("\nSleeping for %ds...\n", dur);
+        printf("Sleeping for %ds...\n", dur);
         sleep(dur);
-	
-	// print distance array
-	printf("\nVertex\tDistance\n");
-        for (i = 0; i < num_nodes; i++) {
-            printf("%d\t%d\n", i, dist[i]);
-        }
     }
 }
 
@@ -270,9 +284,16 @@ int min_distance(int *dist, int *visited) {
 
 void update_cost() {
     int neighbor, new_cost;
-       
-    printf("Enter a neighbor and new node:\n");
+    
+    printf("Enter a neighbor between 0 and %d and new node, or type '-1 -1' to quit:\n", num_nodes - 1);
     scanf("%d %d", &neighbor, &new_cost);
+        
+    if (neighbor == -1 && new_cost == -1) {
+        printf("Killing process %d...\n", getpid());
+        kill(getpid(), SIGKILL);
+    } else {
+        SENDIT = 1;
+    }
   
     pthread_mutex_lock(&my_lock);
 
@@ -284,9 +305,6 @@ void update_cost() {
 
     // send msg to to other nodes using UDP
     send_info();
-    
-    printf("\nNew cost table after updating: \n");
-    print_cost_table(cost_table);
     
     pthread_mutex_unlock(&my_lock);
 }

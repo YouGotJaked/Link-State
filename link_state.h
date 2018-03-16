@@ -3,9 +3,9 @@
 
 #define SLEEP_LO 10
 #define SLEEP_HI 20
+#define WAIT 60
 #define CHANGES 2
 #define INFINITY 2147483647
-#define BUFF_SIZE 1024
 
 typedef struct machine {
 	char name[50];
