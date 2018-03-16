@@ -48,7 +48,7 @@ int main(int argc, char **argv) {
     my_addr.sin_family = AF_INET;
     my_addr.sin_port = htons(host_table[router_id].port);
     my_addr.sin_addr.s_addr = htonl(INADDR_ANY);
-    memset((char*)my_addr.sin_zero, '\0', sizeof(my_addr.sin_zero));
+    memset((char*) my_addr.sin_zero, '\0', sizeof(my_addr.sin_zero));
     addr_size = sizeof my_addr;
     
     // create socket
